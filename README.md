@@ -1,4 +1,4 @@
-# 🎮 PromptRuckus (原 Prompt.io)
+# 🎮 PromptRuckus
 
 **PromptRuckus** 是一款基於 AI 的多人創意寫作派對遊戲 (Jackbox Style)。
 玩家需要根據 AI 隨機生成的怪誕題目，寫出最有趣的 Prompt (提示詞)，並接受來自不同人格的 AI 毒舌評審的犀利講評！
