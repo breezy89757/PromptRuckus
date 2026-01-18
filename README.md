@@ -52,7 +52,7 @@
 
 ## 🛠️ 技術堆疊 (Tech Stack)
 *   **Framework**: ASP.NET Core Blazor (Interactive Server)
-*   **AI SDK**: Azure.AI.OpenAI / Microsoft.SemanticKernel (Conceptual)
+*   **AI SDK**: Azure.AI.OpenAI / Microsoft Agent Framework (Conceptual)
 *   **Real-time Communication**: SignalR (Built-in Blazor)
 *   **Styles**: Pure CSS (Glassmorphism Design)
 
