@@ -1,0 +1,245 @@
+@page "/lobby/{RoomId}"
+@using PromptRuckus.Services
+@using PromptRuckus.Models
+@inject GameService GameService
+@inject NavigationManager Nav
+@implements IDisposable
+@rendermode InteractiveServer
+
+<div class="game-container">
+    @if (_room == null)
+    {
+        <div class="error-msg">❌ 找不到房間或房間已關閉。</div>
+        <button class="btn btn-primary" @onclick='() => Nav.NavigateTo("/")'>回首頁</button>
+    }
+    else
+    {
+        <div class="lobby-header">
+            <h1>🏠 房間代碼: <span class="room-code">@_room.RoomId</span></h1>
+            @if (_room.State == GameState.Lobby)
+            {
+                <div class="invite-section" style="margin-top: 0.5rem; display: flex; gap: 0.5rem; align-items: center;">
+                    <span style="font-size: 0.9rem; color: #666;">🔗 邀請連結:</span>
+                    <input type="text" id="invite-link" value="@($"{Nav.BaseUri}join/{_room.RoomId}")" readonly 
+                           style="background: #f1f2f6; border: 1px solid #dfe6e9; padding: 4px 8px; border-radius: 4px; font-family: monospace; font-size: 0.9rem; width: 330px;" 
+                           onclick="this.select()" />
+                    <button class="btn btn-sm" style="background: #a29bfe; color: white;" 
+                            onclick="document.getElementById('invite-link').select(); document.execCommand('copy');">
+                        複製
+                    </button>
+                </div>
+            }
+            else
+            {
+                <div class="status-badge phase-badge">
+                    @TranslateState(_room.State)
+                    <span class="timer">⏳ @(_timeLeft.ToString("0"))秒</span>
+                </div>
+            }
+        </div>
+
+        @if (_room.State != GameState.Lobby)
+        {
+             <div class="theme-banner" style="background: linear-gradient(135deg, #6c5ce7, #a29bfe); color: white; padding: 1rem; border-radius: 8px; margin-bottom: 1rem; box-shadow: 0 4px 6px rgba(0,0,0,0.1);">
+                <div style="font-size: 0.9rem; opacity: 0.8; margin-bottom: 0.5rem;">
+                    👑 本回合評審: <strong>@_room.CurrentJudgePersona</strong>
+                </div>
+                <h3 style="margin: 0; font-size: 1.4rem;">📢 題目: @_room.CurrentTheme</h3>
+            </div>
+        }
+        
+        @if (_room.State == GameState.Generating)
+        {
+            <div class="generating-view">
+                <div class="spinner"></div>
+                <h2>AI 正在絞盡腦汁... 🧠</h2>
+                <p>正在生成超好笑的結果，請稍候。</p>
+            </div>
+        }
+        
+        @if (_room.State == GameState.Results)
+        {
+             <div class="results-view">
+                <h2>🏆 本回合評分結果</h2>
+                
+                <div class="voting-grid">
+                    @foreach(var result in _room.RoundResults.Values.OrderByDescending(r => r.Score))
+                    {
+                       <div class="vote-card result-card" style="@(result.PlayerId == PlayerId ? "border: 2px solid #a29bfe; background: #fdfdff;" : "")">
+                           <div class="score-badge">@result.Score 分</div>
+                           
+                           <div class="judge-feedback" style="margin-bottom: 1rem; margin-top: 0; background: #fff5f5; border-left: 4px solid #ff7675;">
+                               <div class="judge-icon">🤖 講評 (@_room.CurrentJudgePersona):</div>
+                               <div class="judge-comment" style="font-size: 1.1rem; font-weight: bold; color: #d63031;">@result.JudgeComment</div>
+                           </div>
+                           
+                           <div class="result-prompt-section" style="font-size: 0.85rem; color: #666; margin-bottom: 0.5rem; border-bottom: 1px dashed #ccc; padding-bottom: 0.5rem;">
+                               <strong>💡 玩家的 Prompt:</strong>
+                               <div style="font-style: italic;">@result.PlayerPrompt</div>
+                           </div>
+                           
+                           <blockquote class="content">@result.GeneratedContent</blockquote>
+
+                           <div class="author-reveal">
+                               @(_room.PlayerList.FirstOrDefault(p => p.Id == result.PlayerId)?.Name ?? "Unknown")
+                               @if(result.PlayerId == PlayerId) { <span style="margin-left:5px; font-size: 0.8em; background:#a29bfe; color:white; padding:2px 6px; border-radius:10px;">(我)</span> }
+                           </div>
+                       </div>
+                    }
+                </div>
+             </div>
+        }
+
+        <div class="player-grid">
+            @foreach (var player in _room.PlayerList)
+            {
+                <div class="player-card @(player.IsReady ? "ready" : "")" style="@(player.Id == PlayerId ? "border: 2px solid #0984e3; box-shadow: 0 4px 8px rgba(9,132,227,0.2);" : "")">
+                    <div class="avatar">👤</div>
+                    <div class="name">
+                        @player.Name 
+                        @if(player.Id == PlayerId) { <span style="color: #0984e3; font-weight:bold;">(我)</span> }
+                    </div>
+                    @if (player.Id == _room.HostPlayerId)
+                    {
+                        <span class="host-badge">👑 房主</span>
+                    }
+                    
+                    @if (_room.RoundResults.TryGetValue(player.Id, out var res))
+                    {
+                        <div class="last-score">@res.Score 分</div>
+                    }
+                </div>
+            }
+        </div>
+
+        @if (_room.State == GameState.Prompting)
+        {
+            <div class="prompt-section">
+                @if (!_hasSubmitted)
+                {
+                    <textarea class="form-input" style="width: 100%; height: 160px; font-family: monospace; font-size: 1.1rem; padding: 12px; line-height: 1.5;" 
+                              placeholder="輸入你的 Prompt (提示詞)... (例如: '你是一個脫口秀演員，請用這種語氣...')"
+                              @bind="_currentPrompt"></textarea>
+                    <button class="btn btn-primary" style="margin-top: 1rem; width: 100%; font-size: 1.2rem; padding: 10px;" @onclick="SubmitPrompt">
+                        ⚡ 發送 Prompt
+                    </button>
+                }
+                else
+                {
+                    <div class="waiting-area">
+                        <h3>✅ Prompt 已送出!</h3>
+                        <p>等待其他玩家...</p>
+                    </div>
+                }
+            </div>
+        }
+
+        <div class="lobby-footer">
+            <div class="player-count">👥 @_room.Players.Count 位玩家 | Round @_room.CurrentRound / @_room.MaxRounds</div>
+            
+            @if (IsHost && _room.State == GameState.Lobby)
+            {
+                <button class="btn btn-primary btn-lg" @onclick="StartGame">🚀 開始遊戲</button>
+            }
+            else if (_room.State == GameState.Lobby)
+            {
+                <div class="waiting-text">等待房主開始遊戲...</div>
+            }
+        </div>
+    }
+</div>
+
+@code {
+    [Parameter] public string RoomId { get; set; } = "";
+    
+    [SupplyParameterFromQuery] public string? PlayerId { get; set; }
+
+    private Room? _room;
+    private bool IsHost => _room?.HostPlayerId == PlayerId;
+    private double _timeLeft;
+    private System.Threading.Timer? _uiTimer;
+    
+    private string _currentPrompt = "";
+    private bool _hasSubmitted = false;
+
+    private void SubmitPrompt()
+    {
+        if (_room != null && !string.IsNullOrWhiteSpace(_currentPrompt) && !string.IsNullOrEmpty(PlayerId))
+        {
+            GameService.SubmitPrompt(_room.RoomId, PlayerId, _currentPrompt);
+            _hasSubmitted = true;
+        }
+    }
+
+    protected override void OnInitialized()
+    {
+        _room = GameService.GetRoom(RoomId);
+        GameService.OnRoomStateChanged += OnStateChanged;
+        
+        // Local UI timer to update countdown smoothly
+        _uiTimer = new System.Threading.Timer(_ => 
+        {
+            if (_room != null && _room.State != GameState.Lobby)
+            {
+                var remaining = (_room.StateEndTime - DateTime.UtcNow).TotalSeconds;
+                _timeLeft = Math.Max(0, remaining);
+                InvokeAsync(StateHasChanged);
+            }
+        }, null, 0, 100);
+    }
+    
+    private void OnStateChanged(string roomId)
+    {
+        if (roomId == RoomId.ToUpper())
+        {
+            // Reset local state if new round starts
+            if (_room?.State == GameState.Prompting && !_hasSubmitted && !string.IsNullOrEmpty(_currentPrompt))
+            {
+                 // New round started, but I might have old prompt? 
+            }
+            
+            if (_room?.State == GameState.Prompting)
+            {
+                 // Reset query local state strictly if we moved FROM Results TO Prompting
+                 // But this event fires many times.
+                 // Better: Check if round changed in logic? 
+                 // For now, if we match Prompting state, ensure we can submit again if server says we haven't?
+                 // Actually server tracks prompts.
+                 if (!_room.PlayerPrompts.ContainsKey(PlayerId ?? ""))
+                 {
+                     _hasSubmitted = false;
+                     _currentPrompt = "";
+                 }
+            }
+
+            InvokeAsync(StateHasChanged);
+        }
+    }
+
+    private void StartGame()
+    {
+        if (_room != null && IsHost)
+        {
+            GameService.StartGame(_room.RoomId);
+        }
+    }
+
+    private string TranslateState(GameState state)
+    {
+        return state switch
+        {
+            GameState.Lobby => "大廳",
+            GameState.Prompting => "詠唱中 (Prompting)",
+            GameState.Generating => "AI 生成 & 評分中",
+            GameState.Judging => "AI 毒舌講評中",
+            GameState.Results => "結果揭曉",
+            _ => state.ToString()
+        };
+    }
+
+    public void Dispose()
+    {
+        GameService.OnRoomStateChanged -= OnStateChanged;
+        _uiTimer?.Dispose();
+    }
+}

@@ -1,0 +1,97 @@
+@page "/"
+@page "/join/{InitialRoomCode}"
+@using PromptRuckus.Services
+@using PromptRuckus.Models
+@inject GameService GameService
+@inject NavigationManager Nav
+@rendermode InteractiveServer
+
+<div class="game-container">
+    <div class="title-hero">
+        <h1>PromptRuckus</h1>
+        <p>AI 派對遊戲 🎨✍️</p>
+    </div>
+
+    <div class="entry-form">
+        @if (!string.IsNullOrEmpty(InitialRoomCode))
+        {
+            <div style="background: rgba(0,0,0,0.2); padding: 0.5rem; border-radius: 8px; text-align: center; margin-bottom: 1rem;">
+                👋 邀請您加入房間：<strong>@InitialRoomCode</strong>
+            </div>
+        }
+
+        <input type="text" class="form-input" placeholder="你的名字" @bind="_playerName" />
+        
+        @if (string.IsNullOrEmpty(InitialRoomCode))
+        {
+            <button class="btn-lg btn-create" @onclick="CreateRoom">
+                ✨ 建立房間
+            </button>
+        }
+
+        <div style="display: flex; gap: 0.5rem;">
+            <input type="text" class="form-input" placeholder="房間代碼" @bind="_roomCode" style="flex: 1;" readonly="@(!string.IsNullOrEmpty(InitialRoomCode))" />
+            <button class="btn-lg btn-join" @onclick="JoinRoom">
+                🚀 加入
+            </button>
+        </div>
+
+        @if (!string.IsNullOrEmpty(_errorMessage))
+        {
+            <div style="color: #ff7675; text-align: center; margin-top: 0.5rem;">
+                ⚠️ @_errorMessage
+            </div>
+        }
+    </div>
+</div>
+
+@code {
+    [Parameter] public string? InitialRoomCode { get; set; }
+
+    private string _playerName = "";
+    private string _roomCode = "";
+    private string _errorMessage = "";
+
+    protected override void OnInitialized()
+    {
+        if (!string.IsNullOrEmpty(InitialRoomCode))
+        {
+            _roomCode = InitialRoomCode;
+        }
+    }
+
+    private void CreateRoom()
+    {
+        if (string.IsNullOrWhiteSpace(_playerName))
+        {
+            _errorMessage = "Please enter your name!";
+            return;
+        }
+
+        var room = GameService.CreateRoom(_playerName, out var hostPlayer);
+        Nav.NavigateTo($"/lobby/{room.RoomId}?playerId={hostPlayer.Id}");
+    }
+
+    private void JoinRoom()
+    {
+        if (string.IsNullOrWhiteSpace(_playerName))
+        {
+            _errorMessage = "Please enter your name!";
+            return;
+        }
+        if (string.IsNullOrWhiteSpace(_roomCode))
+        {
+            _errorMessage = "Please enter a Room Code!";
+            return;
+        }
+
+        var room = GameService.JoinRoom(_roomCode, _playerName, out var player);
+        if (room == null || player == null)
+        {
+            _errorMessage = "Room not found or game already started.";
+            return;
+        }
+
+        Nav.NavigateTo($"/lobby/{room.RoomId}?playerId={player.Id}");
+    }
+}
