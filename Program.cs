@@ -9,6 +9,9 @@ builder.Services.AddRazorComponents()
 // Register Game Service
 builder.Services.AddSingleton<PromptRuckus.Services.GameService>();
 builder.Services.AddSingleton<PromptRuckus.Services.AiGenerationService>();
+builder.Services.AddSingleton<PromptRuckus.Services.PromptTemplateService>();
+builder.Services.AddSingleton<PromptRuckus.Services.AchievementService>();
+builder.Services.AddSingleton<PromptRuckus.Services.GameHistoryService>();
 
 var app = builder.Build();
 

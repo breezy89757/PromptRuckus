@@ -42,6 +42,15 @@
                 ⚠️ @_errorMessage
             </div>
         }
+
+        <div style="margin-top: 1rem; text-align: center; display: flex; gap: 0.5rem; justify-content: center;">
+            <button class="btn btn-sm" style="background: #74b9ff; color: white;" @onclick='() => Nav.NavigateTo("/stats")'>
+                📊 統計與成就
+            </button>
+            <button class="btn btn-sm" style="background: #a29bfe; color: white;" @onclick='() => Nav.NavigateTo("/history")'>
+                📜 遊戲歷史
+            </button>
+        </div>
     </div>
 </div>
 

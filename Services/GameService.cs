@@ -10,12 +10,18 @@ namespace PromptRuckus.Services
         // Thread-safe dictionary to hold rooms
         private readonly ConcurrentDictionary<string, Room> _rooms = new();
         private readonly AiGenerationService _aiService;
+        private readonly AchievementService _achievementService;
+        private readonly GameHistoryService _historyService;
+        private static readonly Random _random = new Random();
+        private const int CHEAT_DETECTION_THRESHOLD = 30;
 
         public event Action<string>? OnRoomStateChanged; // RoomId
 
-        public GameService(AiGenerationService aiService)
+        public GameService(AiGenerationService aiService, AchievementService achievementService, GameHistoryService historyService)
         {
             _aiService = aiService;
+            _achievementService = achievementService;
+            _historyService = historyService;
         }
 
         public Room CreateRoom(string hostPlayerName, out Player hostPlayer)
@@ -42,10 +48,17 @@ namespace PromptRuckus.Services
                 return null;
             }
 
-            // Check if game already started
+            // Check if game already started - allow spectators if enabled
             if (room.State != GameState.Lobby)
             {
-                return null; // Or handle spectator
+                if (room.AllowSpectators)
+                {
+                    player = new Player { Name = playerName };
+                    room.Spectators.TryAdd(player.Id, player);
+                    NotifyStateChanged(roomId);
+                    return room;
+                }
+                return null;
             }
 
             player = new Player { Name = playerName };
@@ -92,6 +105,8 @@ namespace PromptRuckus.Services
             {
                 if (room.State == GameState.Lobby)
                 {
+                    // Start tracking game history
+                    _historyService.StartGame(room.RoomId, room.PlayerList);
                     StartRound(room);
                 }
             }
@@ -129,8 +144,10 @@ namespace PromptRuckus.Services
                 
                 room.CurrentTheme = await _aiService.GenerateThemeAsync();
                 
-                // Random Judge Persona
-                room.CurrentJudgePersona = _aiService.GetRandomJudgePersona();
+                // Random Judge Persona - use custom ones if available
+                room.CurrentJudgePersona = room.CustomJudgePersonas.Count > 0 
+                    ? room.CustomJudgePersonas[_random.Next(room.CustomJudgePersonas.Count)]
+                    : _aiService.GetRandomJudgePersona();
             }
             catch(Exception ex)
             {
@@ -239,6 +256,23 @@ namespace PromptRuckus.Services
         {
             room.State = GameState.Results;
             room.StateEndTime = DateTime.UtcNow.AddSeconds(15); // Show results longer
+            
+            // Record round history
+            _historyService.RecordRound(
+                room.RoomId,
+                room.CurrentRound,
+                room.CurrentTheme,
+                room.CurrentJudgePersona,
+                room.RoundResults.Values.ToList()
+            );
+            
+            // Track achievements for this round if it's the last round
+            if (room.CurrentRound == room.MaxRounds)
+            {
+                TrackAchievements(room);
+                CompleteGameHistory(room);
+            }
+            
             NotifyStateChanged(room.RoomId);
 
             // Auto next round
@@ -257,6 +291,84 @@ namespace PromptRuckus.Services
                     NotifyStateChanged(room.RoomId);
                 }
             });
+        }
+
+        private void CompleteGameHistory(Room room)
+        {
+            if (room.RoundResults.Count == 0) return;
+
+            var winner = room.RoundResults.Values.OrderByDescending(r => r.Score).FirstOrDefault();
+            if (winner == null) return;
+
+            var winnerPlayer = room.Players.TryGetValue(winner.PlayerId, out var p) ? p : null;
+            if (winnerPlayer == null) return;
+
+            _historyService.CompleteGame(
+                room.RoomId,
+                winner.PlayerId,
+                winnerPlayer.Name,
+                winner.Score,
+                room.MaxRounds
+            );
+        }
+
+        private void TrackAchievements(Room room)
+        {
+            if (room.RoundResults.Count == 0) return;
+
+            // Find winner (highest score in final round)
+            var orderedResults = room.RoundResults.Values.OrderByDescending(r => r.Score).ToList();
+            if (orderedResults.Count == 0) return;
+
+            var winner = orderedResults.First();
+            
+            foreach (var result in orderedResults)
+            {
+                if (!room.Players.TryGetValue(result.PlayerId, out var player)) continue;
+
+                bool isWinner = result.PlayerId == winner.PlayerId;
+                bool wasLastPlace = result.Score == orderedResults.Last().Score && orderedResults.Count > 1;
+                bool noCheating = result.Score >= CHEAT_DETECTION_THRESHOLD;
+
+                _achievementService.RecordGameResult(
+                    result.PlayerId,
+                    player.Name,
+                    result.Score,
+                    isWinner,
+                    wasLastPlace && isWinner,
+                    noCheating
+                );
+            }
+        }
+
+        public void AddCustomJudgePersona(string roomId, string persona)
+        {
+            if (_rooms.TryGetValue(roomId.ToUpper(), out var room))
+            {
+                if (!string.IsNullOrWhiteSpace(persona) && !room.CustomJudgePersonas.Contains(persona))
+                {
+                    room.CustomJudgePersonas.Add(persona);
+                    NotifyStateChanged(roomId);
+                }
+            }
+        }
+
+        public void RemoveCustomJudgePersona(string roomId, string persona)
+        {
+            if (_rooms.TryGetValue(roomId.ToUpper(), out var room))
+            {
+                room.CustomJudgePersonas.Remove(persona);
+                NotifyStateChanged(roomId);
+            }
+        }
+
+        public void ToggleSpectatorMode(string roomId, bool allow)
+        {
+            if (_rooms.TryGetValue(roomId.ToUpper(), out var room))
+            {
+                room.AllowSpectators = allow;
+                NotifyStateChanged(roomId);
+            }
         }
 
 
