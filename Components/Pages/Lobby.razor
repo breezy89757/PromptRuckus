@@ -3,6 +3,7 @@
 @using PromptRuckus.Models
 @inject GameService GameService
 @inject PromptTemplateService TemplateService
+@inject AchievementService AchievementService
 @inject NavigationManager Nav
 @implements IDisposable
 @rendermode InteractiveServer
@@ -106,6 +107,26 @@
         {
              <div class="results-view">
                 <h2>🏆 本回合評分結果</h2>
+                
+                @if (_room.CurrentRound == _room.MaxRounds && !string.IsNullOrEmpty(PlayerId))
+                {
+                    var newAchievements = AchievementService.GetNewlyUnlockedAchievements(PlayerId);
+                    @if (newAchievements.Count > 0)
+                    {
+                        <div style="background: linear-gradient(135deg, #00b894, #00cec9); color: white; padding: 1rem; border-radius: 8px; margin-bottom: 1rem; box-shadow: 0 4px 8px rgba(0,0,0,0.2);">
+                            <h3 style="margin: 0 0 0.5rem 0;">🎉 新成就解鎖！</h3>
+                            <div style="display: flex; gap: 0.5rem; flex-wrap: wrap;">
+                                @foreach (var ach in newAchievements)
+                                {
+                                    <div style="background: rgba(255,255,255,0.2); padding: 0.5rem 1rem; border-radius: 12px; display: inline-flex; align-items: center; gap: 0.5rem;">
+                                        <span style="font-size: 1.5rem;">@ach.Icon</span>
+                                        <span style="font-weight: bold;">@ach.Name</span>
+                                    </div>
+                                }
+                            </div>
+                        </div>
+                    }
+                }
                 
                 <div class="voting-grid">
                     @foreach(var result in _room.RoundResults.Values.OrderByDescending(r => r.Score))

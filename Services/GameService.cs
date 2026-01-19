@@ -10,12 +10,14 @@ namespace PromptRuckus.Services
         // Thread-safe dictionary to hold rooms
         private readonly ConcurrentDictionary<string, Room> _rooms = new();
         private readonly AiGenerationService _aiService;
+        private readonly AchievementService _achievementService;
 
         public event Action<string>? OnRoomStateChanged; // RoomId
 
-        public GameService(AiGenerationService aiService)
+        public GameService(AiGenerationService aiService, AchievementService achievementService)
         {
             _aiService = aiService;
+            _achievementService = achievementService;
         }
 
         public Room CreateRoom(string hostPlayerName, out Player hostPlayer)
@@ -248,6 +250,13 @@ namespace PromptRuckus.Services
         {
             room.State = GameState.Results;
             room.StateEndTime = DateTime.UtcNow.AddSeconds(15); // Show results longer
+            
+            // Track achievements for this round if it's the last round
+            if (room.CurrentRound == room.MaxRounds)
+            {
+                TrackAchievements(room);
+            }
+            
             NotifyStateChanged(room.RoomId);
 
             // Auto next round
@@ -266,6 +275,35 @@ namespace PromptRuckus.Services
                     NotifyStateChanged(room.RoomId);
                 }
             });
+        }
+
+        private void TrackAchievements(Room room)
+        {
+            if (room.RoundResults.Count == 0) return;
+
+            // Find winner (highest score in final round)
+            var orderedResults = room.RoundResults.Values.OrderByDescending(r => r.Score).ToList();
+            if (orderedResults.Count == 0) return;
+
+            var winner = orderedResults.First();
+            
+            foreach (var result in orderedResults)
+            {
+                if (!room.Players.TryGetValue(result.PlayerId, out var player)) continue;
+
+                bool isWinner = result.PlayerId == winner.PlayerId;
+                bool wasLastPlace = result.Score == orderedResults.Last().Score && orderedResults.Count > 1;
+                bool noCheating = result.Score >= 30; // Assuming scores < 30 indicate cheating detection
+
+                _achievementService.RecordGameResult(
+                    result.PlayerId,
+                    player.Name,
+                    result.Score,
+                    isWinner,
+                    wasLastPlace && isWinner,
+                    noCheating
+                );
+            }
         }
 
         public void AddCustomJudgePersona(string roomId, string persona)

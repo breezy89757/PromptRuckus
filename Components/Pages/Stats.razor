@@ -1,0 +1,213 @@
+@page "/stats"
+@using PromptRuckus.Services
+@using PromptRuckus.Models
+@inject AchievementService AchievementService
+@inject NavigationManager Nav
+@rendermode InteractiveServer
+
+<div class="game-container">
+    <div class="title-hero">
+        <h1>📊 玩家統計</h1>
+        <p>成就與排行榜</p>
+        <button class="btn btn-sm" style="margin-top: 1rem;" @onclick='() => Nav.NavigateTo("/")'>
+            ← 回首頁
+        </button>
+    </div>
+
+    @if (!string.IsNullOrEmpty(_playerId))
+    {
+        var stats = AchievementService.GetPlayerStats(_playerId);
+        if (stats != null)
+        {
+            <div style="background: rgba(255,255,255,0.9); border-radius: 12px; padding: 1.5rem; margin-bottom: 2rem; box-shadow: 0 4px 8px rgba(0,0,0,0.1);">
+                <h2 style="margin-top: 0; color: #2d3436;">👤 @stats.PlayerName</h2>
+                
+                <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(150px, 1fr)); gap: 1rem; margin-bottom: 1.5rem;">
+                    <div class="stat-card">
+                        <div class="stat-value">@stats.TotalGamesPlayed</div>
+                        <div class="stat-label">遊戲場次</div>
+                    </div>
+                    <div class="stat-card">
+                        <div class="stat-value">@stats.TotalWins</div>
+                        <div class="stat-label">獲勝次數</div>
+                    </div>
+                    <div class="stat-card">
+                        <div class="stat-value">@stats.HighestScore</div>
+                        <div class="stat-label">最高分數</div>
+                    </div>
+                    <div class="stat-card">
+                        <div class="stat-value">@stats.BestStreak</div>
+                        <div class="stat-label">最佳連勝</div>
+                    </div>
+                </div>
+
+                <h3 style="color: #6c5ce7; margin-bottom: 1rem;">🏆 已解鎖成就 (@stats.UnlockedAchievements.Count / @AchievementService.GetAllAchievements().Count)</h3>
+                
+                <div style="display: grid; grid-template-columns: repeat(auto-fill, minmax(200px, 1fr)); gap: 1rem;">
+                    @foreach (var achievement in AchievementService.GetAllAchievements())
+                    {
+                        var unlocked = stats.UnlockedAchievements.Any(a => a.Type == achievement.Type);
+                        <div class="achievement-card @(unlocked ? "unlocked" : "locked")">
+                            <div class="achievement-icon">@achievement.Icon</div>
+                            <div class="achievement-name">@achievement.Name</div>
+                            <div class="achievement-desc">@achievement.Description</div>
+                            @if (unlocked)
+                            {
+                                var unlockedAch = stats.UnlockedAchievements.First(a => a.Type == achievement.Type);
+                                <div class="achievement-date">@unlockedAch.UnlockedAt.ToString("yyyy/MM/dd")</div>
+                            }
+                        </div>
+                    }
+                </div>
+            </div>
+        }
+        else
+        {
+            <div style="text-align: center; padding: 2rem; background: rgba(255,255,255,0.8); border-radius: 8px;">
+                <p>找不到玩家統計資料</p>
+            </div>
+        }
+    }
+
+    <div style="background: rgba(255,255,255,0.9); border-radius: 12px; padding: 1.5rem; box-shadow: 0 4px 8px rgba(0,0,0,0.1);">
+        <h2 style="margin-top: 0; color: #2d3436;">🏅 排行榜</h2>
+        
+        <div style="overflow-x: auto;">
+            <table style="width: 100%; border-collapse: collapse;">
+                <thead>
+                    <tr style="border-bottom: 2px solid #dfe6e9;">
+                        <th style="padding: 0.75rem; text-align: left;">排名</th>
+                        <th style="padding: 0.75rem; text-align: left;">玩家</th>
+                        <th style="padding: 0.75rem; text-align: center;">獲勝</th>
+                        <th style="padding: 0.75rem; text-align: center;">最高分</th>
+                        <th style="padding: 0.75rem; text-align: center;">遊戲數</th>
+                        <th style="padding: 0.75rem; text-align: center;">成就</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    @{
+                        var rank = 1;
+                        foreach (var player in AchievementService.GetTopPlayers(20))
+                        {
+                            <tr style="border-bottom: 1px solid #f1f2f6;">
+                                <td style="padding: 0.75rem; font-weight: bold; color: @GetRankColor(rank);">
+                                    @GetRankIcon(rank) @rank
+                                </td>
+                                <td style="padding: 0.75rem;">@player.PlayerName</td>
+                                <td style="padding: 0.75rem; text-align: center;">@player.TotalWins</td>
+                                <td style="padding: 0.75rem; text-align: center;">@player.HighestScore</td>
+                                <td style="padding: 0.75rem; text-align: center;">@player.TotalGamesPlayed</td>
+                                <td style="padding: 0.75rem; text-align: center;">@player.UnlockedAchievements.Count</td>
+                            </tr>
+                            rank++;
+                        }
+                    }
+                </tbody>
+            </table>
+        </div>
+    </div>
+</div>
+
+<style>
+    .stat-card {
+        background: linear-gradient(135deg, #6c5ce7, #a29bfe);
+        color: white;
+        padding: 1rem;
+        border-radius: 8px;
+        text-align: center;
+    }
+
+    .stat-value {
+        font-size: 2rem;
+        font-weight: bold;
+        margin-bottom: 0.25rem;
+    }
+
+    .stat-label {
+        font-size: 0.9rem;
+        opacity: 0.9;
+    }
+
+    .achievement-card {
+        background: white;
+        border: 2px solid #dfe6e9;
+        border-radius: 8px;
+        padding: 1rem;
+        text-align: center;
+        transition: transform 0.2s;
+    }
+
+    .achievement-card:hover {
+        transform: translateY(-2px);
+        box-shadow: 0 4px 8px rgba(0,0,0,0.1);
+    }
+
+    .achievement-card.unlocked {
+        border-color: #00b894;
+        background: linear-gradient(135deg, rgba(0,184,148,0.1), rgba(0,184,148,0.05));
+    }
+
+    .achievement-card.locked {
+        opacity: 0.5;
+        filter: grayscale(100%);
+    }
+
+    .achievement-icon {
+        font-size: 2.5rem;
+        margin-bottom: 0.5rem;
+    }
+
+    .achievement-name {
+        font-weight: bold;
+        color: #2d3436;
+        margin-bottom: 0.25rem;
+    }
+
+    .achievement-desc {
+        font-size: 0.85rem;
+        color: #636e72;
+        margin-bottom: 0.5rem;
+    }
+
+    .achievement-date {
+        font-size: 0.75rem;
+        color: #00b894;
+        font-style: italic;
+    }
+</style>
+
+@code {
+    [SupplyParameterFromQuery] public string? PlayerId { get; set; }
+    
+    private string _playerId = "";
+
+    protected override void OnInitialized()
+    {
+        if (!string.IsNullOrEmpty(PlayerId))
+        {
+            _playerId = PlayerId;
+        }
+    }
+
+    private string GetRankIcon(int rank)
+    {
+        return rank switch
+        {
+            1 => "🥇",
+            2 => "🥈",
+            3 => "🥉",
+            _ => ""
+        };
+    }
+
+    private string GetRankColor(int rank)
+    {
+        return rank switch
+        {
+            1 => "#f39c12",
+            2 => "#95a5a6",
+            3 => "#cd7f32",
+            _ => "#2d3436"
+        };
+    }
+}
