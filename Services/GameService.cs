@@ -42,10 +42,17 @@ namespace PromptRuckus.Services
                 return null;
             }
 
-            // Check if game already started
+            // Check if game already started - allow spectators if enabled
             if (room.State != GameState.Lobby)
             {
-                return null; // Or handle spectator
+                if (room.AllowSpectators)
+                {
+                    player = new Player { Name = playerName };
+                    room.Spectators.TryAdd(player.Id, player);
+                    NotifyStateChanged(roomId);
+                    return room;
+                }
+                return null;
             }
 
             player = new Player { Name = playerName };
@@ -129,8 +136,10 @@ namespace PromptRuckus.Services
                 
                 room.CurrentTheme = await _aiService.GenerateThemeAsync();
                 
-                // Random Judge Persona
-                room.CurrentJudgePersona = _aiService.GetRandomJudgePersona();
+                // Random Judge Persona - use custom ones if available
+                room.CurrentJudgePersona = room.CustomJudgePersonas.Count > 0 
+                    ? room.CustomJudgePersonas[new Random().Next(room.CustomJudgePersonas.Count)]
+                    : _aiService.GetRandomJudgePersona();
             }
             catch(Exception ex)
             {
@@ -257,6 +266,36 @@ namespace PromptRuckus.Services
                     NotifyStateChanged(room.RoomId);
                 }
             });
+        }
+
+        public void AddCustomJudgePersona(string roomId, string persona)
+        {
+            if (_rooms.TryGetValue(roomId.ToUpper(), out var room))
+            {
+                if (!string.IsNullOrWhiteSpace(persona) && !room.CustomJudgePersonas.Contains(persona))
+                {
+                    room.CustomJudgePersonas.Add(persona);
+                    NotifyStateChanged(roomId);
+                }
+            }
+        }
+
+        public void RemoveCustomJudgePersona(string roomId, string persona)
+        {
+            if (_rooms.TryGetValue(roomId.ToUpper(), out var room))
+            {
+                room.CustomJudgePersonas.Remove(persona);
+                NotifyStateChanged(roomId);
+            }
+        }
+
+        public void ToggleSpectatorMode(string roomId, bool allow)
+        {
+            if (_rooms.TryGetValue(roomId.ToUpper(), out var room))
+            {
+                room.AllowSpectators = allow;
+                NotifyStateChanged(roomId);
+            }
         }
 
 

@@ -2,6 +2,7 @@
 @using PromptRuckus.Services
 @using PromptRuckus.Models
 @inject GameService GameService
+@inject PromptTemplateService TemplateService
 @inject NavigationManager Nav
 @implements IDisposable
 @rendermode InteractiveServer
@@ -37,6 +38,50 @@
                 </div>
             }
         </div>
+
+        @if (_room.State == GameState.Lobby && IsHost)
+        {
+            <div style="background: rgba(108, 92, 231, 0.1); border: 1px solid #a29bfe; border-radius: 8px; padding: 1rem; margin-bottom: 1rem;">
+                <details>
+                    <summary style="cursor: pointer; font-weight: bold; color: #6c5ce7;">⚙️ 房間設定 (房主專用)</summary>
+                    <div style="margin-top: 1rem;">
+                        <div style="margin-bottom: 1rem;">
+                            <label style="display: flex; align-items: center; gap: 0.5rem;">
+                                <input type="checkbox" checked="@_room.AllowSpectators" 
+                                       @onchange="@((e) => GameService.ToggleSpectatorMode(_room.RoomId, (bool)(e.Value ?? false)))" />
+                                <span>允許遊戲開始後觀眾加入</span>
+                            </label>
+                        </div>
+                        
+                        <div>
+                            <label style="display: block; margin-bottom: 0.5rem; font-weight: bold;">自訂評審人格:</label>
+                            <div style="display: flex; gap: 0.5rem; margin-bottom: 0.5rem;">
+                                <input type="text" placeholder="例如: 愛說冷笑話的爸爸" @bind="_newJudgePersona" 
+                                       style="flex: 1; padding: 0.5rem; border: 1px solid #dfe6e9; border-radius: 4px;" />
+                                <button class="btn btn-sm" style="background: #00b894; color: white;" @onclick="AddJudgePersona">
+                                    ➕ 新增
+                                </button>
+                            </div>
+                            @if (_room.CustomJudgePersonas.Count > 0)
+                            {
+                                <div style="display: flex; gap: 0.5rem; flex-wrap: wrap;">
+                                    @foreach(var persona in _room.CustomJudgePersonas)
+                                    {
+                                        <span style="background: #74b9ff; color: white; padding: 4px 8px; border-radius: 12px; font-size: 0.9rem; display: inline-flex; align-items: center; gap: 4px;">
+                                            @persona
+                                            <button @onclick="() => GameService.RemoveCustomJudgePersona(_room.RoomId, persona)" 
+                                                    style="background: none; border: none; color: white; cursor: pointer; padding: 0; margin: 0; font-size: 1.1rem; line-height: 1;">
+                                                ×
+                                            </button>
+                                        </span>
+                                    }
+                                </div>
+                            }
+                        </div>
+                    </div>
+                </details>
+            </div>
+        }
 
         @if (_room.State != GameState.Lobby)
         {
@@ -114,28 +159,73 @@
 
         @if (_room.State == GameState.Prompting)
         {
-            <div class="prompt-section">
-                @if (!_hasSubmitted)
-                {
-                    <textarea class="form-input" style="width: 100%; height: 160px; font-family: monospace; font-size: 1.1rem; padding: 12px; line-height: 1.5;" 
-                              placeholder="輸入你的 Prompt (提示詞)... (例如: '你是一個脫口秀演員，請用這種語氣...')"
-                              @bind="_currentPrompt"></textarea>
-                    <button class="btn btn-primary" style="margin-top: 1rem; width: 100%; font-size: 1.2rem; padding: 10px;" @onclick="SubmitPrompt">
-                        ⚡ 發送 Prompt
-                    </button>
-                }
-                else
-                {
-                    <div class="waiting-area">
-                        <h3>✅ Prompt 已送出!</h3>
-                        <p>等待其他玩家...</p>
-                    </div>
-                }
-            </div>
+            @if (!IsSpectator)
+            {
+                <div class="prompt-section">
+                    @if (!_hasSubmitted)
+                    {
+                        <div style="margin-bottom: 1rem;">
+                            <label style="display: block; margin-bottom: 0.5rem; font-weight: bold; color: #2d3436;">
+                                💡 快速選擇範本 (或自己寫):
+                            </label>
+                            <div style="display: flex; gap: 0.5rem; flex-wrap: wrap; margin-bottom: 1rem;">
+                                @foreach(var category in TemplateService.GetAllCategories())
+                                {
+                                    <button class="btn btn-sm" style="@(_selectedCategory == category ? "background: #6c5ce7; color: white;" : "background: #dfe6e9;")"
+                                            @onclick="() => SelectCategory(category)">
+                                        @category
+                                    </button>
+                                }
+                            </div>
+                            
+                            @if (!string.IsNullOrEmpty(_selectedCategory))
+                            {
+                                <div style="display: flex; gap: 0.5rem; flex-wrap: wrap; margin-bottom: 1rem;">
+                                    @foreach(var template in TemplateService.GetTemplatesByCategory(_selectedCategory))
+                                    {
+                                        <button class="btn btn-sm" style="background: #74b9ff; color: white; font-size: 0.9rem;"
+                                                @onclick="() => UseTemplate(template.Template)">
+                                            @template.Name
+                                        </button>
+                                    }
+                                </div>
+                            }
+                        </div>
+                        
+                        <textarea class="form-input" style="width: 100%; height: 160px; font-family: monospace; font-size: 1.1rem; padding: 12px; line-height: 1.5;" 
+                                  placeholder="輸入你的 Prompt (提示詞)... (例如: '你是一個脫口秀演員，請用這種語氣...')"
+                                  @bind="_currentPrompt"></textarea>
+                        <button class="btn btn-primary" style="margin-top: 1rem; width: 100%; font-size: 1.2rem; padding: 10px;" @onclick="SubmitPrompt">
+                            ⚡ 發送 Prompt
+                        </button>
+                    }
+                    else
+                    {
+                        <div class="waiting-area">
+                            <h3>✅ Prompt 已送出!</h3>
+                            <p>等待其他玩家...</p>
+                        </div>
+                    }
+                </div>
+            }
+            else
+            {
+                <div class="waiting-area" style="background: rgba(178, 190, 195, 0.2); border: 2px dashed #b2bec3;">
+                    <h3>👁️ 觀眾模式</h3>
+                    <p>您正在觀戰，無法提交 Prompt。</p>
+                </div>
+            }
         }
 
         <div class="lobby-footer">
-            <div class="player-count">👥 @_room.Players.Count 位玩家 | Round @_room.CurrentRound / @_room.MaxRounds</div>
+            <div class="player-count">
+                👥 @_room.Players.Count 位玩家
+                @if (_room.Spectators.Count > 0)
+                {
+                    <span style="margin-left: 1rem; color: #b2bec3;">👁️ @_room.Spectators.Count 位觀眾</span>
+                }
+                <span style="margin-left: 1rem;">| Round @_room.CurrentRound / @_room.MaxRounds</span>
+            </div>
             
             @if (IsHost && _room.State == GameState.Lobby)
             {
@@ -156,11 +246,34 @@
 
     private Room? _room;
     private bool IsHost => _room?.HostPlayerId == PlayerId;
+    private bool IsSpectator => _room != null && PlayerId != null && _room.Spectators.ContainsKey(PlayerId);
     private double _timeLeft;
     private System.Threading.Timer? _uiTimer;
     
     private string _currentPrompt = "";
     private bool _hasSubmitted = false;
+    private string _selectedCategory = "";
+    private string _newJudgePersona = "";
+
+    private void AddJudgePersona()
+    {
+        if (_room != null && !string.IsNullOrWhiteSpace(_newJudgePersona))
+        {
+            GameService.AddCustomJudgePersona(_room.RoomId, _newJudgePersona);
+            _newJudgePersona = "";
+        }
+    }
+
+    private void SelectCategory(string category)
+    {
+        _selectedCategory = _selectedCategory == category ? "" : category;
+    }
+
+    private void UseTemplate(string template)
+    {
+        _currentPrompt = template;
+        _selectedCategory = ""; // Close the template selector
+    }
 
     private void SubmitPrompt()
     {

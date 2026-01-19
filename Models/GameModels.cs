@@ -32,6 +32,15 @@ namespace PromptRuckus.Models
         public string AssignedStyle { get; set; } // The style they interpreted
     }
 
+    public class PromptTemplate
+    {
+        public string Id { get; set; } = Guid.NewGuid().ToString();
+        public string Name { get; set; } = "";
+        public string Template { get; set; } = "";
+        public string Category { get; set; } = "通用";
+        public string Description { get; set; } = "";
+    }
+
     public class Room
     {
         public string RoomId { get; set; } = Guid.NewGuid().ToString().Substring(0, 6).ToUpper();
@@ -42,6 +51,8 @@ namespace PromptRuckus.Models
         public string CurrentJudgePersona { get; set; } = "AI Judge";
         public int MaxRounds { get; set; } = 3;
         public int CurrentRound { get; set; } = 1;
+        public List<string> CustomJudgePersonas { get; set; } = new();
+        public bool AllowSpectators { get; set; } = true;
 
         // State
         public GameState State { get; set; } = GameState.Lobby;
@@ -49,6 +60,7 @@ namespace PromptRuckus.Models
 
         // Data
         public ConcurrentDictionary<string, Player> Players { get; set; } = new();
+        public ConcurrentDictionary<string, Player> Spectators { get; set; } = new();
         
         // Round Data
         // PlayerId -> Prompt
@@ -62,5 +74,6 @@ namespace PromptRuckus.Models
         
         // Helper to get list
         public List<Player> PlayerList => Players.Values.ToList();
+        public List<Player> SpectatorList => Spectators.Values.ToList();
     }
 }
