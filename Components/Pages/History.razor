@@ -1,0 +1,188 @@
+@page "/history"
+@using PromptRuckus.Services
+@using PromptRuckus.Models
+@inject GameHistoryService HistoryService
+@inject NavigationManager Nav
+@rendermode InteractiveServer
+
+<div class="game-container">
+    <div class="title-hero">
+        <h1>📜 遊戲歷史</h1>
+        <p>回顧過往精彩對局</p>
+        <button class="btn btn-sm" style="margin-top: 1rem;" @onclick='() => Nav.NavigateTo("/")'>
+            ← 回首頁
+        </button>
+    </div>
+
+    <div style="background: rgba(255,255,255,0.9); border-radius: 12px; padding: 1.5rem; box-shadow: 0 4px 8px rgba(0,0,0,0.1);">
+        @if (!string.IsNullOrEmpty(_playerId))
+        {
+            <div style="margin-bottom: 1rem;">
+                <button class="btn btn-sm" style="@(_showAll ? "background: #dfe6e9;" : "background: #6c5ce7; color: white;")" @onclick="() => _showAll = false">
+                    我的遊戲
+                </button>
+                <button class="btn btn-sm" style="@(_showAll ? "background: #6c5ce7; color: white;" : "background: #dfe6e9;")" @onclick="() => _showAll = true">
+                    全部遊戲
+                </button>
+            </div>
+        }
+
+        <div style="margin-bottom: 1rem; color: #636e72;">
+            共 @(_games.Count) 場遊戲記錄
+        </div>
+
+        @if (_games.Count == 0)
+        {
+            <div style="text-align: center; padding: 2rem; color: #636e72;">
+                <p>目前沒有遊戲記錄</p>
+            </div>
+        }
+        else
+        {
+            <div style="display: flex; flex-direction: column; gap: 1rem;">
+                @foreach (var game in _games)
+                {
+                    <div class="game-history-card" @onclick="() => SelectGame(game.Id)" style="cursor: pointer;">
+                        <div class="game-header">
+                            <div style="flex: 1;">
+                                <div style="font-weight: bold; color: #2d3436; margin-bottom: 0.25rem;">
+                                    房間 @game.RoomId | @game.TotalRounds 回合
+                                </div>
+                                <div style="font-size: 0.85rem; color: #636e72;">
+                                    @game.CompletedAt.ToString("yyyy/MM/dd HH:mm")
+                                </div>
+                            </div>
+                            <div style="text-align: right;">
+                                <div style="font-size: 1.2rem; margin-bottom: 0.25rem;">
+                                    🏆 @game.WinnerName
+                                </div>
+                                <div style="font-size: 0.9rem; color: #00b894; font-weight: bold;">
+                                    @game.WinnerScore 分
+                                </div>
+                            </div>
+                        </div>
+                        <div style="margin-top: 0.5rem; padding-top: 0.5rem; border-top: 1px solid #dfe6e9;">
+                            <div style="font-size: 0.85rem; color: #636e72;">
+                                參與玩家: @string.Join(", ", game.ParticipantNames)
+                            </div>
+                        </div>
+                        @if (_selectedGameId == game.Id)
+                        {
+                            <div class="game-details" @onclick:stopPropagation="true">
+                                @foreach (var round in game.Rounds)
+                                {
+                                    <div class="round-detail">
+                                        <h4 style="margin: 0 0 0.5rem 0; color: #6c5ce7;">
+                                            回合 @round.RoundNumber
+                                        </h4>
+                                        <div style="margin-bottom: 0.5rem;">
+                                            <strong>題目:</strong> @round.Theme
+                                        </div>
+                                        <div style="margin-bottom: 0.5rem;">
+                                            <strong>評審:</strong> @round.JudgePersona
+                                        </div>
+                                        <div style="margin-top: 0.75rem;">
+                                            <strong>成績:</strong>
+                                            <div style="display: flex; flex-direction: column; gap: 0.5rem; margin-top: 0.5rem;">
+                                                @foreach (var result in round.Results.OrderByDescending(r => r.Score))
+                                                {
+                                                    var playerName = game.ParticipantNames[game.ParticipantIds.IndexOf(result.PlayerId)];
+                                                    <div style="display: flex; justify-content: space-between; align-items: center; background: #f8f9fa; padding: 0.5rem; border-radius: 4px;">
+                                                        <span>@playerName</span>
+                                                        <span style="font-weight: bold; color: @(result.Score >= 90 ? "#00b894" : result.Score >= 70 ? "#fdcb6e" : "#636e72");">
+                                                            @result.Score 分
+                                                        </span>
+                                                    </div>
+                                                }
+                                            </div>
+                                        </div>
+                                    </div>
+                                }
+                            </div>
+                        }
+                    </div>
+                }
+            </div>
+        }
+    </div>
+</div>
+
+<style>
+    .game-history-card {
+        background: white;
+        border: 2px solid #dfe6e9;
+        border-radius: 8px;
+        padding: 1rem;
+        transition: all 0.2s;
+    }
+
+    .game-history-card:hover {
+        border-color: #6c5ce7;
+        box-shadow: 0 4px 12px rgba(108, 92, 231, 0.15);
+    }
+
+    .game-header {
+        display: flex;
+        justify-content: space-between;
+        align-items: flex-start;
+    }
+
+    .game-details {
+        margin-top: 1rem;
+        padding-top: 1rem;
+        border-top: 2px solid #6c5ce7;
+    }
+
+    .round-detail {
+        background: rgba(108, 92, 231, 0.05);
+        padding: 1rem;
+        border-radius: 6px;
+        margin-bottom: 1rem;
+    }
+
+    .round-detail:last-child {
+        margin-bottom: 0;
+    }
+</style>
+
+@code {
+    [SupplyParameterFromQuery] public string? PlayerId { get; set; }
+    
+    private string _playerId = "";
+    private bool _showAll = false;
+    private List<GameHistory> _games = new();
+    private string? _selectedGameId = null;
+
+    protected override void OnInitialized()
+    {
+        if (!string.IsNullOrEmpty(PlayerId))
+        {
+            _playerId = PlayerId;
+        }
+        LoadGames();
+    }
+
+    private void LoadGames()
+    {
+        if (_showAll || string.IsNullOrEmpty(_playerId))
+        {
+            _games = HistoryService.GetAllGames();
+        }
+        else
+        {
+            _games = HistoryService.GetPlayerGames(_playerId);
+        }
+    }
+
+    private void SelectGame(string gameId)
+    {
+        if (_selectedGameId == gameId)
+        {
+            _selectedGameId = null;
+        }
+        else
+        {
+            _selectedGameId = gameId;
+        }
+    }
+}

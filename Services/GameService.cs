@@ -11,13 +11,15 @@ namespace PromptRuckus.Services
         private readonly ConcurrentDictionary<string, Room> _rooms = new();
         private readonly AiGenerationService _aiService;
         private readonly AchievementService _achievementService;
+        private readonly GameHistoryService _historyService;
 
         public event Action<string>? OnRoomStateChanged; // RoomId
 
-        public GameService(AiGenerationService aiService, AchievementService achievementService)
+        public GameService(AiGenerationService aiService, AchievementService achievementService, GameHistoryService historyService)
         {
             _aiService = aiService;
             _achievementService = achievementService;
+            _historyService = historyService;
         }
 
         public Room CreateRoom(string hostPlayerName, out Player hostPlayer)
@@ -101,6 +103,8 @@ namespace PromptRuckus.Services
             {
                 if (room.State == GameState.Lobby)
                 {
+                    // Start tracking game history
+                    _historyService.StartGame(room.RoomId, room.PlayerList);
                     StartRound(room);
                 }
             }
@@ -251,10 +255,20 @@ namespace PromptRuckus.Services
             room.State = GameState.Results;
             room.StateEndTime = DateTime.UtcNow.AddSeconds(15); // Show results longer
             
+            // Record round history
+            _historyService.RecordRound(
+                room.RoomId,
+                room.CurrentRound,
+                room.CurrentTheme,
+                room.CurrentJudgePersona,
+                room.RoundResults.Values.ToList()
+            );
+            
             // Track achievements for this round if it's the last round
             if (room.CurrentRound == room.MaxRounds)
             {
                 TrackAchievements(room);
+                CompleteGameHistory(room);
             }
             
             NotifyStateChanged(room.RoomId);
@@ -275,6 +289,25 @@ namespace PromptRuckus.Services
                     NotifyStateChanged(room.RoomId);
                 }
             });
+        }
+
+        private void CompleteGameHistory(Room room)
+        {
+            if (room.RoundResults.Count == 0) return;
+
+            var winner = room.RoundResults.Values.OrderByDescending(r => r.Score).FirstOrDefault();
+            if (winner == null) return;
+
+            var winnerPlayer = room.Players.TryGetValue(winner.PlayerId, out var p) ? p : null;
+            if (winnerPlayer == null) return;
+
+            _historyService.CompleteGame(
+                room.RoomId,
+                winner.PlayerId,
+                winnerPlayer.Name,
+                winner.Score,
+                room.MaxRounds
+            );
         }
 
         private void TrackAchievements(Room room)
