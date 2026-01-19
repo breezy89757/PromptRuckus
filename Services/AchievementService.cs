@@ -167,17 +167,7 @@ namespace PromptRuckus.Services
             // Check if requirement met
             if (currentCount >= achievement.RequiredCount)
             {
-                var unlockedAchievement = new Achievement
-                {
-                    Id = achievement.Id,
-                    Type = achievement.Type,
-                    Name = achievement.Name,
-                    Description = achievement.Description,
-                    Icon = achievement.Icon,
-                    RequiredCount = achievement.RequiredCount,
-                    UnlockedAt = DateTime.UtcNow
-                };
-                
+                var unlockedAchievement = achievement.Clone(DateTime.UtcNow);
                 stats.UnlockedAchievements.Add(unlockedAchievement);
             }
         }

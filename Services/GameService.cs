@@ -12,6 +12,8 @@ namespace PromptRuckus.Services
         private readonly AiGenerationService _aiService;
         private readonly AchievementService _achievementService;
         private readonly GameHistoryService _historyService;
+        private static readonly Random _random = new Random();
+        private const int CHEAT_DETECTION_THRESHOLD = 30;
 
         public event Action<string>? OnRoomStateChanged; // RoomId
 
@@ -144,7 +146,7 @@ namespace PromptRuckus.Services
                 
                 // Random Judge Persona - use custom ones if available
                 room.CurrentJudgePersona = room.CustomJudgePersonas.Count > 0 
-                    ? room.CustomJudgePersonas[new Random().Next(room.CustomJudgePersonas.Count)]
+                    ? room.CustomJudgePersonas[_random.Next(room.CustomJudgePersonas.Count)]
                     : _aiService.GetRandomJudgePersona();
             }
             catch(Exception ex)
@@ -326,7 +328,7 @@ namespace PromptRuckus.Services
 
                 bool isWinner = result.PlayerId == winner.PlayerId;
                 bool wasLastPlace = result.Score == orderedResults.Last().Score && orderedResults.Count > 1;
-                bool noCheating = result.Score >= 30; // Assuming scores < 30 indicate cheating detection
+                bool noCheating = result.Score >= CHEAT_DETECTION_THRESHOLD;
 
                 _achievementService.RecordGameResult(
                     result.PlayerId,

@@ -24,6 +24,20 @@ namespace PromptRuckus.Models
         public string Icon { get; set; } = "🏆";
         public int RequiredCount { get; set; } = 1;
         public DateTime UnlockedAt { get; set; }
+
+        public Achievement Clone(DateTime unlockedAt)
+        {
+            return new Achievement
+            {
+                Id = this.Id,
+                Type = this.Type,
+                Name = this.Name,
+                Description = this.Description,
+                Icon = this.Icon,
+                RequiredCount = this.RequiredCount,
+                UnlockedAt = unlockedAt
+            };
+        }
     }
 
     public class PlayerStats

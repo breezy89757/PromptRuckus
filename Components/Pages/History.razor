@@ -84,9 +84,12 @@
                                         <div style="margin-top: 0.75rem;">
                                             <strong>成績:</strong>
                                             <div style="display: flex; flex-direction: column; gap: 0.5rem; margin-top: 0.5rem;">
+                                                @{
+                                                    var playerIdToName = game.ParticipantIds.Zip(game.ParticipantNames, (id, name) => new { id, name }).ToDictionary(x => x.id, x => x.name);
+                                                }
                                                 @foreach (var result in round.Results.OrderByDescending(r => r.Score))
                                                 {
-                                                    var playerName = game.ParticipantNames[game.ParticipantIds.IndexOf(result.PlayerId)];
+                                                    var playerName = playerIdToName.TryGetValue(result.PlayerId, out var name) ? name : "Unknown";
                                                     <div style="display: flex; justify-content: space-between; align-items: center; background: #f8f9fa; padding: 0.5rem; border-radius: 4px;">
                                                         <span>@playerName</span>
                                                         <span style="font-weight: bold; color: @(result.Score >= 90 ? "#00b894" : result.Score >= 70 ? "#fdcb6e" : "#636e72");">
